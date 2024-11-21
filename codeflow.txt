@@ -1,0 +1,5 @@
+### Code flow for crmatcher ###
+From main page user press button "Check Cluster Role" ->
+It'll open next page crmatcher.html and run func UploadFile package handler (parse file crmatcher.html with LoggedUser and form upload file)
+Func UploadFile also run Func ReadFileCrNames packager readcrifile (collect cluster role names and get len for items)
+

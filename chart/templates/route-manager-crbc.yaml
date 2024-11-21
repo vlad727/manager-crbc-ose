@@ -1,0 +1,17 @@
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: manager-crbc-dap
+  namespace: {{ .Values.namespace.name }}
+spec:
+  host: {{ .Values.fqdn.route }}
+  to:
+    kind: Service
+    name: {{ .Values.service.name }}
+    weight: 100
+  port:
+    targetPort: 4180
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

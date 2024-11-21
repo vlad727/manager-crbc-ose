@@ -1,0 +1,8 @@
+apiVersion: oauth.openshift.io/v1
+grantMethod: auto
+kind: OAuthClient
+metadata:
+  name: manager-crbc-oautclient
+redirectURIs:
+  - https://{{ .Values.fqdn.route }}/oauth/callback
+secret: {{ .Values.oauth2proxy.secret }}
