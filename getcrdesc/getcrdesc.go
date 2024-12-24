@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/yaml"
 	"text/template"
 	"webapp/globalvar"
-	"webapp/home"
+	"webapp/home/loggeduser"
 )
 
 var (
@@ -17,6 +17,8 @@ var (
 )
 
 func GetCrDesc(w http.ResponseWriter, r *http.Request) {
+	// send request to parse and get logged user string
+	LoggedUser := loggeduser.LoggedUserRun(r)
 
 	// parse post request
 	r.ParseForm() // Анализирует переданные параметры url, затем анализирует пакет ответа для тела POST (тела запроса)
@@ -170,7 +172,7 @@ func GetCrDesc(w http.ResponseWriter, r *http.Request) {
 	}{
 		ClusterRoleName:   ClusterRoleName,
 		Items:             s,
-		MessageLoggedUser: home.LoggedUser,
+		MessageLoggedUser: LoggedUser,
 	}
 
 	// parse html

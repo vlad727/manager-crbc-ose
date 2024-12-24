@@ -6,10 +6,13 @@ import (
 	"net/http"
 	"text/template"
 	"time"
-	"webapp/home"
+	"webapp/home/loggeduser"
 )
 
 func UploadFile(w http.ResponseWriter, r *http.Request) {
+
+	// send request to parse and get logged user string
+	LoggedUser := loggeduser.LoggedUserRun(r)
 	// execution time
 	start := time.Now()
 	//logging
@@ -21,7 +24,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	Msg := struct {
 		MessageLoggedUser string
 	}{
-		MessageLoggedUser: home.LoggedUser,
+		MessageLoggedUser: LoggedUser, //home.LoggedUser,
 	}
 	// send string to web page execute
 	err := t.Execute(w, Msg)

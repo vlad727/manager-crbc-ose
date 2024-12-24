@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"webapp/globalvar"
-	"webapp/jwtdecode"
+	"webapp/home/loggeduser"
 )
 
 var (
@@ -58,11 +58,13 @@ func bindingSubjects(saName, namespace string) []rbacv1.Subject {
 
 func ParsePostRequest(w http.ResponseWriter, r *http.Request) {
 
-	// ----------------------------------------------------------------------------------------------------------------------------
 	// parse post request
+	// send request to parse and get logged user string
+	LoggedUser := loggeduser.LoggedUserRun(r)
 
 	// init empty slice
 	sl := []string{}
+
 	r.ParseForm() // Анализирует переданные параметры url, затем анализирует пакет ответа для тела POST (тела запроса)
 	// внимание: без вызова метода ParseForm последующие данные не будут получены
 	log.Printf("Full post request: %s", r)
@@ -96,9 +98,9 @@ func ParsePostRequest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
 	// ----------------------------------------------------------------------------------------------------------------------------
 	// create cluster role binding logging input
-
 	// sl it's slice with service account namespace and requested cluster role
 	for index, el := range sl {
 		//log.Println(index, el)
@@ -154,7 +156,7 @@ func ParsePostRequest(w http.ResponseWriter, r *http.Request) {
 		// validate.bac example: crb-requester: <ldap-user>
 		setAnnotation := mainstruct{
 			Metadata: Annotations{
-				Requester{jwtdecode.LoggedUser},
+				Requester{LoggedUser},
 			},
 		}
 
@@ -171,4 +173,6 @@ func ParsePostRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
+
+	Checkbox = "" // set Checkbox to ""
 }

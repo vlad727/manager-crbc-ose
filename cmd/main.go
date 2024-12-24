@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"time"
+	"webapp/checkhealth"
 	"webapp/crbcmain"
 	"webapp/crbshow"
 	"webapp/crmatcher/getcrname"
@@ -18,11 +19,6 @@ import (
 
 const (
 	porthttp = ":8080"
-	//	porthttps = ":8443" webhook won't use with this application
-)
-
-var (
-	tlscert, tlskey string
 )
 
 func main() {
@@ -31,9 +27,6 @@ func main() {
 	start := time.Now()
 
 	getcrname.CrAllowedList() // func which one count len for items all allowed cluster roles
-
-	// collect groups from cluster
-	//groups.GroupCollect()
 
 	// logging
 	log.Println("Hello my dear friend")
@@ -53,24 +46,7 @@ func main() {
 	http.HandleFunc("/uploadfile", handlers.UploadFile)              // crmatcher -> handlers ->  handlerpost.go upload file
 	http.HandleFunc("/uploadedfile", handlers.HandlePost)            // already uploaded file send to parse data from file
 	http.HandleFunc("/crmatcherresult", handlers.CrMatcherResult)    // crmatcherresult -> handlers ->  handlerresult.go show page with result checking cluster roles
-	//http.HandleFunc("/health", checkhealth.Health)                   // allow check health for application
-	/* webhook won't use with this application
-	// goroutine for webhook part port 8443
-	// need to run it in goroutine because http.ListenAndServe can't listen on two ports at the same time
-	go func() {
-
-		log.Printf("Port %s listening", porthttps)
-		flag.StringVar(&tlscert, "tlsCertFile", "/certs/tls.crt",
-			"File containing a certificate for HTTPS.")
-		flag.StringVar(&tlskey, "tlsKeyFile", "/certs/tls.key",
-			"File containing a private key for HTTPS.")
-		flag.Parse()
-		// func validate.bac in package webhook
-		http.HandleFunc("/validate.bac", validate.bac.Validate)
-		log.Fatal(http.ListenAndServeTLS(porthttps, tlscert, tlskey, nil))
-	}()
-
-	*/
+	http.HandleFunc("/health", checkhealth.Health)                   // allow check health for application
 
 	// Code to measure
 	duration := time.Since(start)
@@ -78,5 +54,4 @@ func main() {
 
 	// listen http
 	http.ListenAndServe(porthttp, nil)
-
 }

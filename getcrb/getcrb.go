@@ -12,7 +12,7 @@ import (
 	"strings"
 	"text/template"
 	"webapp/globalvar"
-	"webapp/home"
+	"webapp/home/loggeduser"
 )
 
 var (
@@ -21,6 +21,9 @@ var (
 
 // GetCrb execute after press button "Get Cluster Role Binding"
 func GetCrb(w http.ResponseWriter, r *http.Request) {
+
+	// send request to parse and get logged user string
+	LoggedUser := loggeduser.LoggedUserRun(r)
 
 	// read file with cluster role bindings which should hide
 	data, err := os.ReadFile("/files/clusterroles")
@@ -52,7 +55,7 @@ func GetCrb(w http.ResponseWriter, r *http.Request) {
 	// iterate over items to get name for cluster role binding and linked cluster role
 	for _, el := range listCRB.Items {
 		if slices.Contains(slCrNotAllowed, el.RoleRef.Name) {
-			log.Println("Not allowed to show ")
+			//log.Println("Not allowed to show ")
 		} else {
 			sl1 = append(sl1, "<b>"+el.Name+"</b>"+" "+el.RoleRef.Name)
 			mapTemp["List"] = sl1
@@ -64,7 +67,8 @@ func GetCrb(w http.ResponseWriter, r *http.Request) {
 	// Marshal to yaml for out to web page
 	yamlFile, err := yaml.Marshal(mapTemp)
 	if err != nil {
-		panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// convert to string for struct if you do not convert it will be in bytes
@@ -79,7 +83,7 @@ func GetCrb(w http.ResponseWriter, r *http.Request) {
 		MessageLoggedUser string
 	}{
 		Message:           str,
-		MessageLoggedUser: home.LoggedUser,
+		MessageLoggedUser: LoggedUser,
 	}
 	// send string to web page execute
 	err = t.Execute(w, Msg)

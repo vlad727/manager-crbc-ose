@@ -9,7 +9,7 @@ import (
 	crcheck "webapp/crmatcher"
 	"webapp/crmatcher/getcrname"
 	"webapp/crmatcher/readfile/readyamlfile"
-	"webapp/home"
+	"webapp/home/loggeduser"
 )
 
 var (
@@ -17,6 +17,9 @@ var (
 )
 
 func CrMatcherResult(w http.ResponseWriter, r *http.Request) {
+
+	// send request to parse and get logged user string
+	LoggedUser := loggeduser.LoggedUserRun(r)
 
 	// send dst dir to read file
 	readyamlfile.ReadFileYaml(DstDirName)
@@ -47,7 +50,7 @@ func CrMatcherResult(w http.ResponseWriter, r *http.Request) {
 		MessageLoggedUser string
 		MessageResult     string
 	}{
-		MessageLoggedUser: home.LoggedUser,
+		MessageLoggedUser: LoggedUser, //home.LoggedUser,
 		MessageResult:     ResultForCheck,
 	}
 	// send string to web page execute

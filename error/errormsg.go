@@ -3,11 +3,14 @@ package errormsg
 import (
 	"net/http"
 	"text/template"
-	"webapp/home"
+	"webapp/home/loggeduser"
 	"webapp/parsepost"
 )
 
 func ErrorOut(w http.ResponseWriter, r *http.Request) {
+
+	// send request to parse and get logged user string
+	LoggedUser := loggeduser.LoggedUserRun(r)
 	t, _ := template.ParseFiles("tmpl/error.html")
 	// init struct
 	Msg := struct {
@@ -15,7 +18,7 @@ func ErrorOut(w http.ResponseWriter, r *http.Request) {
 		MessageLoggedUser string
 	}{
 		Message:           parsepost.ErrorMsg,
-		MessageLoggedUser: home.LoggedUser,
+		MessageLoggedUser: LoggedUser,
 	}
 	// send string to web page
 	err := t.Execute(w, Msg)
