@@ -3,63 +3,73 @@ package getsa
 import (
 	"log"
 	"net/http"
+	"os"
 	"sigs.k8s.io/yaml"
 	"text/template"
 	"webapp/getsacollect"
-	"webapp/home/loggeduser"
+	"webapp/loggeduser"
 )
 
-// GetSa возвращает информацию о пользователе в формате YAML.
-// Получаем request, парсим, получаем имя пользователя и его группы
-// далее передаем имя пользователя и группы в функцию которая нам вернем
-// его namespaces и service accounts, где пользователь является админом или rolebinding создан на группу
-// все это форматируем в yaml и выгружаем пользователю на web страницу
+var (
+	logger = log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)
+)
 
 func GetSa(w http.ResponseWriter, r *http.Request) {
+	defer logger.Println("INFO: Func GetSa finished")
+	logger.Println("INFO: Func GetSa started")
+	// send request to parse, trim and decode jwt, get map with user and groups
+	UserAndGroups := loggeduser.LoggedUserRun(r) // get logged user and groups, ex:  map[ose.test.user:[ipausers tuz-endless]]
 
-	// send request to parse and get logged user string
-	LoggedUser := loggeduser.LoggedUserRun(r)
-	log.Printf("Get username from func LoggedUserRun %s", LoggedUser)
+	logger.Println("INFO: Got message form LoggedUserRun")
+	log.Println(UserAndGroups)
 
-	// get map already sorted and slice for crbcmain, slice will be skipped
-	// Получаем карту, отсортированную для вывода
-	M3, _ := getsacollect.GetSaCollect(LoggedUser)
-	//log.Println(Sl1)                                 // get it from getsa collect slice we don't need
+	// name of logged user
+	var username string
+
+	// get logged user name from map
+	for k, _ := range UserAndGroups {
+		username = k
+		break
+	}
+
+	// Создаем новую карту для каждого вызова функции таким образом мы очистим данные из mNsAndSa
+	mNsAndSa := make(map[string][]string)
+
+	// send map to func GetSaCollect and return M3 map and Sl1 slice
+	mNsAndSa, _ = getsacollect.GetSaCollect(UserAndGroups)
+	// Sl1 will be skipped  because we don't need here, Sl1 it's slice with namespace name and service account name example below:
+	// my-test-ns: my-test-sa
+	// M3 it's map with namespace name and service account name like below:
+	// ose-test-ns:
+	// - default
+	// - ose-sa
 
 	// Marshal to yaml for out to web page
-	// Преобразуем карту в YAML
-	yamlFile, err := yaml.Marshal(M3)
+	yamlFile, err := yaml.Marshal(mNsAndSa)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	// convert to string for struct if you do not convert it will be in bytes
-	// Конвертируем YAML в строку
 	str := string(yamlFile)
-
-	// parse html template
-	// Парсим HTML-шаблон
+	// parse html
 	t, err := template.ParseFiles("tmpl/getsa.html")
 	if err != nil {
 		log.Printf("Error parsing template: %v\n", err)
 		return
 	}
-
 	// init struct and var
-	// Передаем данные в шаблон
 	Msg := struct {
 		Message           string `yaml:"message"`
 		MessageLoggedUser string
 	}{
 		Message:           str,
-		MessageLoggedUser: LoggedUser,
+		MessageLoggedUser: username,
 	}
-
 	// execute
-	// Выполняем рендеринг шаблона
 	err = t.Execute(w, Msg)
 	if err != nil {
 		return
 	}
-
+	mNsAndSa = nil
 }

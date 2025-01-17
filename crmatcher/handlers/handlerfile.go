@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	_ "webapp/crmatcher/readfile/readyamlfile"
 )
 
 var (
@@ -30,8 +29,8 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	// Create the uploads folder if it doesn't
-	// already exist
+
+	// Create the uploads folder if it doesn't exist
 	err = os.MkdirAll("./uploads", os.ModePerm)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -39,7 +38,8 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// logging
-	//log.Println("Dir ./uploads has been created")
+	log.Println("Dir ./uploads has been created")
+
 	// Create a new file in the uploads directory
 	dst, err := os.Create(fmt.Sprintf("./uploads/%d%s", time.Now().UnixNano(), filepath.Ext(fileHeader.Filename)))
 	if err != nil {
@@ -47,10 +47,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	defer dst.Close()
-
-	// Copy the uploaded file to the filesystem
-	// at the specified destination
+	// Copy the uploaded file to the filesystem at the specified destination
 	_, err = io.Copy(dst, file)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -58,7 +55,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// set destination path to file to string
-	DstDirName = dst.Name()
+	DstDirName = dst.Name() // Note this variable is visible for all func because it's global var and another code in the same package, declared in handlerfile.go
 
 	// redirect to page with description
 	http.Redirect(w, r, "/crmatcherresult", http.StatusSeeOther)

@@ -1,68 +1,77 @@
+// Package getcrdesc get request with cluster role name then parse it
+// iterate over it, and provide yaml to web page
 package getcrdesc
 
 import (
-	"fmt"
 	"golang.org/x/net/context"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"log"
 	"net/http"
 	"sigs.k8s.io/yaml"
 	"text/template"
-	"webapp/globalvar"
-	"webapp/home/loggeduser"
-)
-
-var (
-	ClusterRoleName = ""
+	"webapp/clientgo"
+	"webapp/loggeduser"
 )
 
 func GetCrDesc(w http.ResponseWriter, r *http.Request) {
-	// send request to parse and get logged user string
-	LoggedUser := loggeduser.LoggedUserRun(r)
+
+	// logging
+	log.Println("Func GetCrDes started...")
+
+	// send request to parse, trim and decode jwt, get map with user and groups
+	UserAndGroups := loggeduser.LoggedUserRun(r)
+
+	var username string            // name of logged user
+	for k := range UserAndGroups { // get logged user name from map
+		username = k
+		break
+	}
 
 	// parse post request
-	r.ParseForm() // Анализирует переданные параметры url, затем анализирует пакет ответа для тела POST (тела запроса)
-	// внимание: без вызова метода ParseForm последующие данные не будут получены
-	//log.Printf("Full post request: %s", r)
-	log.Println(r.Form) // печатает информацию на сервере
+	err := r.ParseForm()
+	if err != nil {
+		log.Println("Can't parse request")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// logging
+	log.Println(r.Form)
 	log.Println("Path: ", r.URL.Path)
 
+	// cluster role name
+	var clusterRoleName string
+
 	// iterate over request with for to get requested cluster role name
+	// example post request: map[choice1:[1nd-line-support]]
 	for k, v := range r.Form {
-		log.Println("Key: ", k)
-		log.Printf("Value:%s", v)
+		log.Printf("key: %s value: %s", k, v)
 		for _, el := range v {
-			ClusterRoleName = el
+			clusterRoleName = el
 		}
 
 	}
-	// logging
-	log.Println("Func GetCrDesc ...")
 
-	// get cluster role description
-	getCr, err := globalvar.Clientset.RbacV1().ClusterRoles().Get(context.Background(), ClusterRoleName, v1.GetOptions{})
+	// get cluster role from k8s
+	getCr, err := clientgo.Сlientset.RbacV1().ClusterRoles().Get(context.Background(), clusterRoleName, v1.GetOptions{})
 	if err != nil {
 		log.Println(err)
-		fmt.Fprintf(w, "Cluster is unavailable %s", err)
+		log.Printf("Cluster is unavailable %s", err)
 	}
-	// main slice
-	outSlice := []map[string][]string{}
 
-	// temp slices
-	sl0 := []string{}
-	sl1 := []string{}
-	sl2 := []string{}
-	sl3 := []string{}
-	sl4 := []string{}
+	// main map
+	var outSlice []map[string][]string
 
-	// temp maps
+	// temp slices and temp maps
+	var sl1, sl2, sl3, sl4 []string
+
 	m0 := map[string][]string{}
 	m1 := map[string][]string{}
 	m2 := map[string][]string{}
 	m3 := map[string][]string{}
 	m4 := map[string][]string{}
-
-	// iterate over items to get sa and ns and put it to string with string builder
+	
+	// iterate over cluster role
 	for _, el := range getCr.Rules {
 
 		tempslice := [][]string{el.APIGroups, el.ResourceNames, el.Resources, el.Verbs, el.NonResourceURLs}
@@ -70,6 +79,7 @@ func GetCrDesc(w http.ResponseWriter, r *http.Request) {
 
 			switch x {
 			case 0:
+				sl0 := []string{}
 				for _, a := range item {
 					if len(a) == 0 {
 						a += "\"\""
@@ -162,7 +172,7 @@ func GetCrDesc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// convert to string
-	s := string(yamlFile)
+	itemsClusterRole := string(yamlFile)
 
 	// init struct with var
 	Msg := struct {
@@ -170,9 +180,9 @@ func GetCrDesc(w http.ResponseWriter, r *http.Request) {
 		Items             string `yaml:"out"`
 		MessageLoggedUser string
 	}{
-		ClusterRoleName:   ClusterRoleName,
-		Items:             s,
-		MessageLoggedUser: LoggedUser,
+		ClusterRoleName:   clusterRoleName,
+		Items:             itemsClusterRole,
+		MessageLoggedUser: username,
 	}
 
 	// parse html

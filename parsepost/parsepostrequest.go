@@ -2,23 +2,20 @@ package parsepost
 
 import (
 	"encoding/json"
+	"fmt"
 	"golang.org/x/net/context"
 	rbacv1 "k8s.io/api/rbac/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
-	"webapp/globalvar"
-	"webapp/home/loggeduser"
+	"webapp/clientgo"
+	"webapp/loggeduser"
 )
 
 var (
-	sa       = "" // service account name
-	ns       = "" // namespace name (namespace where service account exist)
-	cr       = "" // cluster role (requested cluster role which one chose by user)
-	Crbname  = "" // cluster role binding name concatenate sa + ns + cl ( var for logging to get result name for crb)
-	ErrorMsg = "" // Message for page errormsg (if crb already exist or smt else)
 	Checkbox = ""
 )
 
@@ -58,17 +55,31 @@ func bindingSubjects(saName, namespace string) []rbacv1.Subject {
 
 func ParsePostRequest(w http.ResponseWriter, r *http.Request) {
 
-	// parse post request
-	// send request to parse and get logged user string
-	LoggedUser := loggeduser.LoggedUserRun(r)
+	log.Println("Func ParsePostRequest started...")
 
+	// send request to parse, trim and decode jwt, get map with user and groups
+	UserAndGroups := loggeduser.LoggedUserRun(r)
+
+	// name of logged user
+	var username string
+
+	// get logged user name from map
+	for k := range UserAndGroups {
+		username = k
+		break
+	}
 	// init empty slice
-	sl := []string{}
+	var sl []string
 
-	r.ParseForm() // Анализирует переданные параметры url, затем анализирует пакет ответа для тела POST (тела запроса)
+	// Анализирует переданные параметры url, затем анализирует пакет ответа для тела POST (тела запроса)
 	// внимание: без вызова метода ParseForm последующие данные не будут получены
-	log.Printf("Full post request: %s", r)
-	log.Println(r.Form) // печатает информацию на сервере
+	err := r.ParseForm()
+	if err != nil {
+		log.Printf("Can't parse request: %v", err)
+	}
+
+	log.Printf("Full post request: %v", r)
+	log.Println(r.Form)
 	log.Println("Path: ", r.URL.Path)
 	//log.Println("Schema: ", r.URL.Scheme)
 	//log.Println(r.Form["url_long"])
@@ -99,8 +110,10 @@ func ParsePostRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ----------------------------------------------------------------------------------------------------------------------------
-	// create cluster role binding logging input
+	// declare vars for service account namespace and cluster role
+	var sa, ns, cr string
+
+	// create cluster role binding
 	// sl it's slice with service account namespace and requested cluster role
 	for index, el := range sl {
 		//log.Println(index, el)
@@ -135,44 +148,50 @@ func ParsePostRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create cluster role binding with clientset
-	_, err := globalvar.Clientset.RbacV1().ClusterRoleBindings().Create(context.Background(), binding, v1.CreateOptions{})
+	_, err = clientgo.Сlientset.RbacV1().ClusterRoleBindings().Create(context.Background(), binding, v1.CreateOptions{})
 	if err != nil {
 		log.Println(err)
-		ErrorMsg = err.Error()
+		ErrorMsg := "Failed to create cluster role binding: " + err.Error()
+		url := fmt.Sprintf("/error?error=%s", url.QueryEscape(ErrorMsg)) // url path /error, key is error and value will be ErrorMsg
 		// redirect to failed creation page
 		// if crb already exist or smt goes wrong
-		http.Redirect(w, r, "/error", http.StatusSeeOther)
+		http.Redirect(w, r, url, http.StatusSeeOther)
+		log.Printf("Show url string %s from packager parsepostrequest", url)
 
-	} else {
-		// concatenate strings to crb name
-		Crbname = sa + "-" + ns + "-" + cr + "-" + "crbc"
-		// redirect to success creation page
-		// show page with crb name
-		http.Redirect(w, r, "/crbshow", http.StatusSeeOther)
-
-		log.Printf("Cluster role binding %s has been created...", Crbname)
-
-		// set annotation
-		// validate.bac example: crb-requester: <ldap-user>
-		setAnnotation := mainstruct{
-			Metadata: Annotations{
-				Requester{LoggedUser},
-			},
-		}
-
-		// marshal var setAnnotation to json
-		bytes, _ := json.Marshal(setAnnotation)
-
-		//Note: that type used MergePatchType (allow add new piece of json)
-		_, err = globalvar.Clientset.RbacV1().ClusterRoleBindings().Patch(context.TODO(), Crbname, types.MergePatchType, bytes, v1.PatchOptions{})
-		if err != nil {
-			log.Printf("Failed to set validate.bac for %s", Crbname)
-			log.Println(err)
-		} else {
-			log.Println("Cluster role binding has been annotated", string(bytes))
-		}
+		/* send error message through http.redirect instead global var
+		errorMessage := "Some error message"
+		 url := fmt.Sprintf("/error?error=%s", url.QueryEscape(errorMessage))
+		*/
 
 	}
 
-	Checkbox = "" // set Checkbox to ""
+	// concatenate strings to crb name
+	Crbname := sa + "-" + ns + "-" + cr + "-" + "crbc"
+
+	// prepare annotation string
+	// example: crb-requester: <ldap-user>
+	setAnnotation := mainstruct{
+		Metadata: Annotations{
+			Requester{username},
+		},
+	}
+
+	// marshal var setAnnotation to json
+	bytes, _ := json.Marshal(setAnnotation)
+
+	//Note: that type used MergePatchType (allow add new piece of json)
+	_, err = clientgo.Сlientset.RbacV1().ClusterRoleBindings().Patch(context.TODO(), Crbname, types.MergePatchType, bytes, v1.PatchOptions{})
+	if err != nil {
+		log.Printf("Failed to set annotation for %s", Crbname)
+		log.Println(err)
+	} else {
+		log.Println("Cluster role binding has been annotated", string(bytes))
+		// redirect to success creation page and show page with crb name
+		url := fmt.Sprintf("/error?error=%s", url.QueryEscape(Crbname))
+		http.Redirect(w, r, url, http.StatusSeeOther)
+		log.Printf("Show url string %s from packager parsepostrequest", url)
+		log.Printf("Cluster role binding %s has been created...", Crbname)
+	}
+
+	//Checkbox = "" // set Checkbox to ""
 }

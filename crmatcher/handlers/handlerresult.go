@@ -6,34 +6,37 @@ import (
 	"net/http"
 	"os"
 	"text/template"
-	crcheck "webapp/crmatcher"
 	"webapp/crmatcher/getcrname"
-	"webapp/crmatcher/readfile/readyamlfile"
-	"webapp/home/loggeduser"
-)
-
-var (
-	ResultForCheck string
+	"webapp/crmatcher/readfile"
+	"webapp/loggeduser"
 )
 
 func CrMatcherResult(w http.ResponseWriter, r *http.Request) {
 
-	// send request to parse and get logged user string
-	LoggedUser := loggeduser.LoggedUserRun(r)
+	// logging
+	log.Println("Fund CrMatcherResult started")
+
+	// send request to parse, trim and decode jwt, get map with user and groups
+	UserAndGroups := loggeduser.LoggedUserRun(r)
+
+	var LoggedUser string // username for logged user
+	for k, v := range UserAndGroups {
+		k = LoggedUser
+		log.Println(k, v)
+	}
 
 	// send dst dir to read file
-	readyamlfile.ReadFileYaml(DstDirName)
-	// run check cluster role from file
-	crcheck.CrCheck()
+	readfile.ReadFileYaml(DstDirName) // Note this variable is visible for all func because it's global var and another code in the same package, declared in handlerfile.go
 
-	log.Println(getcrname.MapCR)
 	// compare cluster roles with provided cluster role from yaml
-	for k, v := range getcrname.MapCR {
-		if v == readyamlfile.LenForCr {
+	var ResultForCheck string
+
+	for k, v := range getcrname.CrAllowedList() {
+		if v == readfile.LenForCr { // если находим одинаковую длину то у нас match таким образом мы находим совпадение или не совпадение
 			log.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-			log.Printf("Looks like %s cluster role is the same as %s ", k, readyamlfile.Cr.Metadata.Name)
+			log.Printf("Looks like %s cluster role is the same as %s ", k, readfile.Cr.Metadata.Name)
 			log.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-			ResultForCheck = "Looks like your cluster role " + "<b>" + k + "</b>" + " the same as " + "<b>" + readyamlfile.Cr.Metadata.Name + "</b>" + ". You don't need add this cluster role"
+			ResultForCheck = "Looks like your cluster role " + "<b>" + k + "</b>" + " the same as " + "<b>" + readfile.Cr.Metadata.Name + "</b>" + ". You don't need add this cluster role"
 			break
 		} else {
 			//log.Printf("Branch else get values and keys, value: %s key: %d", k, v)
@@ -62,7 +65,7 @@ func CrMatcherResult(w http.ResponseWriter, r *http.Request) {
 	// set string to nill
 	ResultForCheck = ""
 	// set len for cluster role to 0
-	readyamlfile.LenForCr = 0
+	readfile.LenForCr = 0
 
 	// clear dir with uploaded files
 	pathString := "/app/uploads"

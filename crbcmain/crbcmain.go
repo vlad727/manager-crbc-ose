@@ -1,3 +1,6 @@
+// Package crbcmain the main page for tab "Create Cluster Role Binding"
+// read file with allowed label, collect allowed cluster roles, provides select element with service account and namespace
+// also provide select element with cluster role for description cluster role and counter (how much crb has been created)
 package crbcmain
 
 import (
@@ -8,10 +11,10 @@ import (
 	"net/http"
 	"os"
 	"text/template"
+	"webapp/clientgo"
 	"webapp/counter"
 	"webapp/getsacollect"
-	"webapp/globalvar"
-	"webapp/home/loggeduser"
+	"webapp/loggeduser"
 )
 
 type DataStruct struct {
@@ -26,68 +29,75 @@ func CrbcMain(w http.ResponseWriter, r *http.Request) {
 	// logging
 	log.Println("Func CrbcMain started")
 
-	// send request for parse and get logged user string
-	LoggedUser := loggeduser.LoggedUserRun(r)
+	// send request to parse, trim and decode jwt, get map with user and groups
+	UserAndGroups := loggeduser.LoggedUserRun(r)
 
+	var username string
+	// get logged user name from map
+	for k := range UserAndGroups {
+		username = k
+		break
+	}
 	// func Counter collect and count all cluster role bindings which one has substring "crbc"
-	NumberOfEntities := counter.Counter()
+	numberOfEntities := counter.Counter()
 
-	// Get Service Account and Namespaces for Select Element
-	var sliceSaName []string // slice for sa name
-	// why we use slice? Because we need to send it to html and add ":"
-	M1, Sl1 := getsacollect.GetSaCollect(LoggedUser)
-	log.Println(M1) // got it from getsacollect func not used
-	for _, x := range Sl1 {
+	// empty slice for service account and name namespace
+	var sliceSaName []string
+
+	// get slice with map and change it
+	_, slSaAndNs := getsacollect.GetSaCollect(UserAndGroups)
+
+	// change slice add colon and space to slice
+	for _, x := range slSaAndNs {
 		for k, v := range x {
-			s := fmt.Sprint(k + ":" + " " + v)
-			sliceSaName = append(sliceSaName, s)
+			result := fmt.Sprint(k + ":" + " " + v)
+			sliceSaName = append(sliceSaName, result)
 		}
 	}
 
-	// Cluster Roles for Select Element
-	data, err := os.ReadFile("/files/allowedlabel") // read file with allowed label
+	// read file with label
+	labelCrBytes, err := os.ReadFile("/files/allowedlabel")
 	if err != nil {
-		log.Printf("Error message: %s", err)
-		log.Println("Can't read file ")
-
+		log.Fatalf("Can't read file: %v", err)
 	}
+
 	// convert bytes to string
-	dataString := string(data)
+	labelString := string(labelCrBytes)
 
 	// list cluster role binding only with allowed label
-	listCR, err := globalvar.Clientset.RbacV1().ClusterRoles().List(context.Background(), v1.ListOptions{LabelSelector: dataString})
+	listClusterRoles, err := clientgo.Сlientset.RbacV1().ClusterRoles().List(context.Background(), v1.ListOptions{LabelSelector: labelString})
 	if err != nil {
 		log.Println(err)
 	}
-	var sliceCrAllowed []string // temporary slice
 
-	// iterate over items to get name for cluster role binding
-	for _, el := range listCR.Items {
+	// slice for allowed Cluster Roles
+	var sliceCrAllowed []string
+
+	// iterate over items to get name cluster role will use for creating cluster role binding
+	for _, el := range listClusterRoles.Items {
 		sliceCrAllowed = append(sliceCrAllowed, el.Name)
 	}
 	// logging cluster roles
 	log.Println("Slice cluster roles requested and collected")
 
-	// client-go to struct for output
+	// struct for output
 	DataProvider := DataStruct{
 		CrbSlice:          sliceCrAllowed,   // output slice with cluster roles with allowed label
-		SaMap:             sliceSaName,      // output map example: my-sa:my-namespace
-		MessageLoggedUser: LoggedUser,       // logged user string
-		NumberOfEntities:  NumberOfEntities, // number of cluster role bindings created via manager-crbc
+		SaMap:             sliceSaName,      // output map example: my-sa: my-namespace
+		MessageLoggedUser: username,         // logged user string
+		NumberOfEntities:  numberOfEntities, // number of cluster role bindings created via manager-crbc
 	}
 
 	// parse template
-	t, _ := template.ParseFiles("tmpl/crbcmain.html")
+	t, err := template.ParseFiles("tmpl/crbcmain.html")
+	if err != nil {
+		log.Printf("Can't parse file: %v", err)
+	}
 
 	err = t.Execute(w, DataProvider)
 	if err != nil {
-		return
+		log.Printf("Error execute %v", err)
 	}
-
-	// set slice to nil to prevent overload
-	sliceSaName = nil
-	sliceCrAllowed = nil
-	LoggedUser = ""
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/octet-stream")

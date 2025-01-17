@@ -5,8 +5,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/strings/slices"
 	"log"
-	"webapp/globalvar"
-	"webapp/groups"
+	"webapp/clientgo"
 	"webapp/readfiles"
 )
 
@@ -14,61 +13,73 @@ type StructGetSa struct {
 	Collection map[string]string
 }
 
-func GetSaCollect(LoggedUser string) (map[string][]string, []map[string]string) { // func return 2 values for getsa func and crbcmain
+type StructForRbSubject struct {
+	Subject []string
+}
+
+// func compareSlice search items from slice in another slice
+func compareSlice(groups, roleBindingSubjects []string) bool {
+
+	for _, group := range groups {
+		if slices.Contains(roleBindingSubjects, group) {
+			return true
+		}
+	}
+	return false
+}
+
+// func return 2 values for getsa func and crbcmain
+func GetSaCollect(LoggedUser map[string][]string) (map[string][]string, []map[string]string) {
+	// logging
+	log.Println("Func GetSaCollect run ...")
 
 	// Run func for read file with user admin
-	UserAdmin := readfiles.ReadFile()
-
-	// get len for var and string
-	log.Println("Get Len")
-	log.Println(len(UserAdmin))
-	log.Println(len("admin"))
-
-	log.Printf("Got it from func read file %s", UserAdmin)
+	UserAdmin, err := readfiles.ReadFile()
+	if err != nil {
+		log.Printf("Cant get data from about user admin; %s", err)
+	}
 
 	// logging
-	log.Println("Func GetSa ....")
-	// data from jwt decode
-	//log.Println("Got it from JWT decode: %s", jwtdecode.UserMap)
-
-	//run group collect func
-	// This function gets the groups that the user is a member of
-	M1 := groups.GroupCollect(LoggedUser)
+	log.Printf("Got it from func read file %s", UserAdmin)
 
 	var UserName string
 	var Groups []string
+
 	// iterate over map to assign data to new client-go
-	for k, v := range M1 {
+	for k, v := range LoggedUser {
 		UserName = k
 		Groups = v
 	}
 
-	// get list role-bindings in namespaces
-	listRB, err := globalvar.Clientset.RbacV1().RoleBindings("").List(context.TODO(), v1.ListOptions{})
+	// Get list RoleBindings in namespaces
+	listRB, err := clientgo.Сlientset.RbacV1().RoleBindings("").List(context.TODO(), v1.ListOptions{})
 	if err != nil {
-		log.Printf("Failed %s", listRB)
+		log.Printf("Failed to get rolebindings. %s", err)
 		log.Println(err)
 	}
-	// temp string for name from RB Subject
-	var strNameFromSub string
+	// Temp string for name from RoleBinding Subject
+	var RoleBindingSubjects []string
 
 	// AllowedNsSlice slice for allowed namespaces
-	AllowedNsSlice := []string{}
-	// iterate over role-bindings
-	for _, el := range listRB.Items {
-		// iterate over Subjects to get name (also it contains: apiGroup, kind, namespace )
+	var AllowedNsSlice []string
+
+	// Iterate over role-bindings
+	for _, el := range listRB.Items { // get rolebinding from list -> then iterate over this rb -> get el.Subject
+		// Iterate over Subjects to get name (also it contains: apiGroup, kind, namespace )
 		for _, x := range el.Subjects {
-			//log.Println(x.Name)
-			strNameFromSub = x.Name //May be group or username from ldap or slice of users
+			log.Println(x.Name)
+			RoleBindingSubjects = append(RoleBindingSubjects, x.Name) //May be group or username from ldap example or may array of users
 
 		}
-		// check condition: if clusterRole == admin and linked with user or group, add namespace to allowed list
+		// check condition: if clusterRole == admin and linked with user or group add namespace to allowed list
 		// readfiles.UserAdmin <-- get var from configmap func ReadFile
-		if el.RoleRef.Name == UserAdmin && strNameFromSub == UserName || slices.Contains(Groups, strNameFromSub) {
+		if el.RoleRef.Name == UserAdmin && slices.Contains(RoleBindingSubjects, UserName) || compareSlice(Groups, RoleBindingSubjects) {
 			AllowedNsSlice = append(AllowedNsSlice, el.Namespace)
+			RoleBindingSubjects = nil // clear slice
 		}
 
 	}
+
 	// logging to know which one namespace we got
 	log.Printf("Allowed namespaces: %s", AllowedNsSlice)
 
@@ -76,7 +87,7 @@ func GetSaCollect(LoggedUser string) (map[string][]string, []map[string]string) 
 	//ns := []string{"ose-test-namespace-1", "ose-test-namespace-11", "ose-test-ns", "ose-groups"}
 
 	// get all service accounts
-	ListSa, _ := globalvar.Clientset.CoreV1().ServiceAccounts("").List(context.Background(), v1.ListOptions{})
+	ListSa, _ := clientgo.Сlientset.CoreV1().ServiceAccounts("").List(context.Background(), v1.ListOptions{})
 
 	// get all service accounts and their namespaces
 
@@ -92,15 +103,22 @@ func GetSaCollect(LoggedUser string) (map[string][]string, []map[string]string) 
 	}
 	// logging
 	log.Printf("Slice Sl1 %s", Sl1) // <<< slice with map ns:sa
-	// здесь у нас slice в нем мапа и каждому ns свой ns, что нам не подходит для "отдачи" на страницу
+	// здесь у нас slice в нем мапа и каждому sa свой sa, что нам не подходит для "отдачи" на страницу
 	// [map[ose-groups:default] map[ose-test-namespace-1:default] map[ose-test-namespace-1:test-sa] map[ose-test-namespace-11:default] map[ose-test-ns:default] map[ose-test-ns:ose-sa]]
 	M3 := make(map[string][]string) // init empty map
 	for _, x := range Sl1 {         //iterate over slice which one contain maps
 		for k, v := range x {
-			if _, ok := M3[k]; !ok { // при первой итерации у нас нету ключа и это false
-				M3[k] = make([]string, 0) // <<< значит мы создаем срез " make([]string, 0)" в нашей мапе M1 и в key добавляем наше имя namespace "ose-groups"
+			if _, ok := M3[k]; !ok { // при первой итерации у нас нет ключа и это false
+				M3[k] = make([]string, 0) // <<< значит мы создаем срез " make([]string, 0)" в нашей мапе M3 и в key добавляем наше имя namespace "ose-groups"
 			}
-			M3[k] = append(M3[k], v) // здесь мы в нашей мапе в срез добавляем наш service account "default"
+			M3[k] = append(M3[k], v) // здесь мы в нашей мапе в срез добавляем наш service account "default" а ключ у нас имя namespace
+			/*
+				if ok {
+					M3[k] = append(M3[k], v)
+				} else {
+				M3[k] = make([]string, 0)
+				}
+			*/
 		}
 	}
 	/*
@@ -111,7 +129,6 @@ func GetSaCollect(LoggedUser string) (map[string][]string, []map[string]string) 
 
 	*/
 	// logging
-	log.Printf("Map M1 %s", M1)
 	log.Printf("Map M3 %s", M3)
 	/*
 		What I want to see in M3:
@@ -120,8 +137,37 @@ func GetSaCollect(LoggedUser string) (map[string][]string, []map[string]string) 
 			- default
 			- builder
 	*/
-	//sl1 = nil //  set slice to nil to prevent overload
 	return M3, Sl1
 	//  map[ose-groups:[default] ose-test-namespace-1:[default test-sa] ose-test-namespace-11:[default] ose-test-ns:[default ose-sa]]
-
 }
+
+/*      How subject looks like
+
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: ose.test.user      << this is x.Name var or, it may like below array of users
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: ose.test.user      << this is x.Name var
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: alice     << this is x.Name var or like below with group
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: group
+  name: admins      << this is x.Name var
+*/

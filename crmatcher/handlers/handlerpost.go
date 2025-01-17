@@ -1,4 +1,4 @@
-// Package handlers func UplodaFile show page with button upload and allow you get file from your local machine
+// Package handlers func UploadFile show page with button upload and allow you get file from your local machine
 package handlers
 
 import (
@@ -6,13 +6,18 @@ import (
 	"net/http"
 	"text/template"
 	"time"
-	"webapp/home/loggeduser"
+	"webapp/loggeduser"
 )
 
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 
-	// send request to parse and get logged user string
-	LoggedUser := loggeduser.LoggedUserRun(r)
+	// send request to parse, trim and decode jwt, get map with user and groups
+	UserAndGroups := loggeduser.LoggedUserRun(r)
+
+	var username string               // name of logged user
+	for k, _ := range UserAndGroups { // get logged user name from map
+		username = k
+	}
 	// execution time
 	start := time.Now()
 	//logging
@@ -24,7 +29,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	Msg := struct {
 		MessageLoggedUser string
 	}{
-		MessageLoggedUser: LoggedUser, //home.LoggedUser,
+		MessageLoggedUser: username, //home.LoggedUser,
 	}
 	// send string to web page execute
 	err := t.Execute(w, Msg)

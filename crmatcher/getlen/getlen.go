@@ -8,12 +8,7 @@ import (
 	"k8s.io/utils/strings/slices"
 	"log"
 	"time"
-	"webapp/globalvar"
-)
-
-var (
-	LenForCrItems int
-	CrNames       []string
+	"webapp/clientgo"
 )
 
 func GetLen(y []string) map[string]int {
@@ -21,12 +16,16 @@ func GetLen(y []string) map[string]int {
 	// execution time
 	log.Println("Func GetLen started")
 	start := time.Now()
-	// declare map
+
+	// temp var
+	var lenForCrItems int
+
+	// declare map which one will be store name for cluster role and len for their items
 	// <cluster role name>: <len for all their items>
-	M1 := make(map[string]int)
+	mClusterRoleLen := make(map[string]int)
 
 	// ----------------------------------------------------------------------------------------------------------------
-	listCr, _ := globalvar.Clientset.RbacV1().ClusterRoles().List(context.TODO(), v1.ListOptions{})
+	listCr, _ := clientgo.Сlientset.RbacV1().ClusterRoles().List(context.TODO(), v1.ListOptions{})
 	//log.Println(listCr.Rules)
 	for _, x := range listCr.Items {
 		if slices.Contains(y, x.Name) {
@@ -38,52 +37,24 @@ func GetLen(y []string) map[string]int {
 				for _, y := range tempslice {
 					// iterate over items for example APIGroups or ResourceNames then get sum of all len items
 					for _, z := range y {
-						LenForCrItems += len(z)
+						lenForCrItems += len(z)
 					}
 				}
 
 			}
-			M1[x.Name] = LenForCrItems
+			mClusterRoleLen[x.Name] = lenForCrItems
 			// set len to nil, need for the next cluster role items
-			LenForCrItems = 0
+			lenForCrItems = 0
 		}
 
 	}
-	log.Println(M1)
+	log.Println(mClusterRoleLen)
 
-	/*
-		// ##############################################################################################################
-		// THIS PART NEED ONLY FOR SORT MAP BY VALUE
-		// JUST FOR PRETTY OUTPUT
-		pairs := make([][2]interface{}, 0, len(M1))
-		for k, v := range M1 {
-			pairs = append(pairs, [2]interface{}{k, v})
-		}
-
-		// Sort slice based on values
-		sort.Slice(pairs, func(i, j int) bool {
-			return pairs[i][1].(int) < pairs[j][1].(int)
-		})
-
-		// Extract sorted keys
-		keys := make([]string, len(pairs))
-		for i, p := range pairs {
-			keys[i] = p[0].(string)
-		}
-
-		// Print sorted map
-		for _, k := range keys {
-			log.Printf("%s: %d\n", k, M1[k])
-		}
-
-	*/
-	// ##############################################################################################################
 	// Code to measure
 	duration := time.Since(start)
 	log.Printf("Time execution for Func GetLen  %s", duration)
 	// return map to main
-	return M1
-
+	return mClusterRoleLen
 }
 
 /*
@@ -96,7 +67,6 @@ rules:
   verbs:
   - delete
 
-
 log.Printf("The len for string namespaces is %d", len("namespaces"))
 log.Printf("The len for string delete is %d", len("delete"))
 2024/10/22 13:26:13 The len for string namespaces is 10
@@ -104,10 +74,8 @@ log.Printf("The len for string delete is %d", len("delete"))
 Note: "" won't count
 So, after count all items we will know the size(len) for each cluster role and compare it with size(len) provided cluster role
 
-
 panic: assignment to entry in nil map
 You have to initialize the map using the make function (or a map literal) before you can add any elements:
-
 m := make(map[string]float64)
 m["pi"] = 3.1416
 */
